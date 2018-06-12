@@ -1,0 +1,11 @@
+<script>
+window.addEventListener("error", (ev)=>{
+  console.error(ev, ev.error);
+  alert(ev+":"+ev.error);
+});
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fetch/2.0.3/fetch.min.js"></script>
+<script src="./keras-js/dist/keras.js"></script>
+<script src="./dist/index.js"></script>
+<canvas id="cnv"></canvas>
+<ol id="result"></ol>

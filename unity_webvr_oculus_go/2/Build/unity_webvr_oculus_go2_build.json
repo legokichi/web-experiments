@@ -1,0 +1,13 @@
+{
+"companyName": "DefaultCompany",
+"productName": "unity_webvr_oculus_go",
+"dataUrl": "unity_webvr_oculus_go2_build.data.unityweb",
+"asmCodeUrl": "unity_webvr_oculus_go2_build.asm.code.unityweb",
+"asmMemoryUrl": "unity_webvr_oculus_go2_build.asm.memory.unityweb",
+"asmFrameworkUrl": "unity_webvr_oculus_go2_build.asm.framework.unityweb",
+"TOTAL_MEMORY": 536870912,
+"graphicsAPI": ["WebGL 2.0", "WebGL 1.0"],
+"webglContextAttributes": {"preserveDrawingBuffer": false},
+"splashScreenStyle": "Dark",
+"backgroundColor": "#231F20"
+}

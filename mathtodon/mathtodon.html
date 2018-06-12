@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <title>Mathtodon Toot</title>
+  <meta name="robots" content="nofollow" />
+  <meta http-equiv="cache-control" content="no-cache" />
+  <meta http-equiv="pragma" content="no-cache" />
+  <meta name="viewport" content="width=480" />
+  <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/2.6.0/github-markdown.min.css" />
+</head>
+<body>
+<style>
+body{
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  padding: 0px;
+  margin: 0px;
+  overflow: hidden;
+}
+#math_wrapper{
+  position: absolute;
+  top: 0; bottom: 0; right: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: scroll;
+  -webkit-overflow-scrolling: touch;
+  -moz-overflow-scrolling: touch;
+  overflow-scrolling: touch;
+  opacity: 0.3;
+}
+#math_placeholder{
+  font-size: 1.5em;
+  background-color: white;
+}
+#btns{
+  position: fixed;
+  display: inline-block;
+  top: 0px;
+  right: 0px;
+  text-align: right;
+}
+textarea#editor {
+  position: absolute;
+  top: 0; bottom: 0; right: 0; left: 0;
+  font-family: Menlo, Consolas, Monaco, "Lucida Console", "Andale Mono", "Liberation Mono", "DejaVu Sans Mono", "Courier New", "Bitstream Vera Sans Mono", monospace;
+  background-color: transparent;
+  width: 100%;
+  height: 100%;
+  /*box-sizing: border-box;*/
+  border: none;
+  -webkit-overflow-scrolling: touch;
+  -moz-overflow-scrolling: touch;
+  overflow-scrolling: touch;
+}
+canvas {
+  z-index: 100;
+  display: block;
+  position: absolute;
+  border: 1px solid black;
+}
+</style>
+<div id="math_wrapper"><div id="math_placeholder" class="markdown-body"></div></div>
+<textarea id="editor"></textarea>
+<div id="btns">
+  <button id="toot_btn">toot</button>
+  <button id="toot_img_btn">toot image</button>
+  <button id="clear_btn">clear</button>
+</div>
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  showMathMenu: false,
+  showMathMenuMSIE: false,
+  skipStartupTypeset: true,
+  showProcessingMessages: false,
+  messageStyle: "none", 
+  texHints: false,
+  extensions: ["tex2jax.js"],
+  jax: ["input/TeX", "output/HTML-CSS"],
+  tex2jax: {
+    inlineMath: [["$","$"],["\\(","\\)"]],
+    displayMath: [["$$","$$"],["\\[","\\]"]],
+    processEscapes: true
+  },
+  "HTML-CSS": {
+    availableFonts: ["TeX"],
+    scale: 100,
+    preferredFont: "TeX",
+    webFont: "TeX"
+  },
+  TeX: {
+    extensions: ["AMSmath.js", "AMSsymbols.js", "/xypic.js"]
+  },
+  SVG: {
+      font: "TeX"
+  },
+});
+</script>
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/javascript-canvas-to-blob/3.7.0/js/canvas-to-blob.min.js" async></script>
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/0.4.1/html2canvas.min.js" async></script>
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/fetch/2.0.3/fetch.min.js" async></script>
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS_HTML"></script>
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/marked/0.3.6/marked.min.js"></script>
+<script>
+marked.setOptions({
+  renderer: new marked.Renderer(),
+  gfm: true,
+  tables: true,
+  breaks: false,
+  pedantic: false,
+  sanitize: false,
+  smartLists: false,
+  smartypants: false
+});
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((regs)=>{
+    for(let reg of regs) {
+      reg.unregister();
+    }
+  });
+  /*
+  navigator.serviceWorker.addEventListener('controllerchange', (ev)=>{ console.info(ev.type); });
+  navigator.serviceWorker.register('/sw.js').then((reg)=>{
+    console.info('ServiceWorker registration successful with scope: ', reg.scope);
+    reg.addEventListener('updatefound', (ev)=>{ console.info(ev.type); });
+    reg.installing.addEventListener('statechange', (ev)=>{ console.info(ev.target, ev.target.state); });
+    reg.waiting.addEventListener('statechange', (ev)=>{ console.info(ev.target, ev.target.state); });
+    reg.active.addEventListener('statechange', (ev)=>{ console.info(ev.target, ev.target.state); });
+    reg.update();
+  }).catch((err)=>{
+    console.warn('ServiceWorker registration failed: ', err);
+  });
+  */
+}
+</script>
+<script>
+$(main);
+
+window.addEventListener("error", (ev)=>{
+  console.error(ev, ev.error);
+  alert(ev+":"+ev.error);
+});
+
+function main(){
+  const $textarea = $("#editor");
+  const $math_wrapper = $("#math_wrapper");
+  const $math_placeholder = $("#math_placeholder");
+  const $toot_btn = $("#toot_btn");
+  const $toot_img_btn = $("#toot_img_btn");
+  const $clear_btn = $("#clear_btn");
+
+  let typesetting = false;
+  let old_md = "";
+  let lastResult = [];
+  function typesetMathMD(md){
+    return Promise.resolve().then(()=>{
+      if(old_md === md){ return; }
+      console.time("total");
+      old_md = md;
+      typesetting = true;  
+      console.time("marked");
+      const rendered = unescape(marked(escape(md)));
+      console.timeEnd("marked");
+      console.time("diff");
+      const $elm = $("<div>"+rendered+"</div>");
+      const result = $elm.children().toArray();
+      const destination = $math_placeholder.children().toArray();
+      if (result.length === 0 || lastResult.length === 0 || destination.length === 0) {
+        // init
+        $math_placeholder.html(result);
+      }else{
+        partialUpdate(result, lastResult, destination);
+      }
+      lastResult = $(result).clone();
+      console.timeEnd("diff");
+      console.time("typeset");
+      return typeset($math_placeholder.get(0));
+    }).catch((err)=>{
+      console.error(err, err.stack);
+      alert(err);
+    }).then(()=>{
+      console.timeEnd("typeset");
+      console.timeEnd("total");
+      typesetting = false;
+    });
+  }
+
+  // save and typeset
+  let tid = 0;
+  $textarea.on("input", function recur(){
+    clearTimeout(tid);
+    tid = setTimeout(()=>{
+      if(typesetting){ return recur(); }
+      const md = localStorage["tex"] = $textarea.val();
+      typesetMathMD(md);
+    }, 500);
+  });
+
+  document.addEventListener('keydown', function(ev){
+    // ctrl-s save
+    if((ev.metaKey || ev.ctrlKey) && ev.key === "s"){
+      ev.preventDefault();
+      localStorage["tex"] = $textarea.val();
+    }
+  });
+
+  /*
+  $textarea.get(0).scrollHeight - $textarea.get(0).offsetHeight == $textarea.scrollTop()  // 目一杯スクロールしたとき
+  $math_wrapper.get(0).scrollHeight === $math_wrapper.scrollTop() + $math_wrapper.height() // 目一杯スクロールしたとき
+  */
+  // sync scroll
+  const t = $textarea.get(0);
+  $textarea.on("scroll", (ev)=>{
+    const ratio = t.scrollTop / ( t.scrollHeight - t.offsetHeight );
+    //const ratio = $textarea.scrollTop() / ( $textarea.get(0).scrollHeight - $textarea.get(0).offsetHeight );
+    $math_wrapper.scrollTop( ratio * ( $math_wrapper.get(0).scrollHeight - $math_wrapper.height() ) );
+  });
+
+  // toot
+  let mstdn = null;
+  $toot_btn.on("click", (ev)=>{ _async(function* (){
+    if(mstdn == null){
+      mstdn = yield login();
+      if(mstdn == null){ return; } // toot cancel
+    }
+    const toot = $textarea.val();
+    const ret = yield mstdn.postStatus(toot, []);
+    alert("tooted.");
+  })().catch((err)=>{ console.error(err, err.stack); alert(err); }); });
+  
+  // toot image
+  $toot_img_btn.on("click", (ev)=>{ _async(function* (){
+    $math_placeholder.css("width", $math_placeholder.width());
+    const cnv = yield takeshot($math_placeholder.get(0));
+    $math_placeholder.css("width", null);
+    $(cnv).appendTo("body");
+    yield sleep(0);
+    const ok = confirm("ok?");
+    $(cnv).remove();
+    if(ok){
+      if(mstdn == null){
+        mstdn = yield login();
+        if(mstdn == null){ return; } // toot cancel
+     }
+      const toot = $textarea.val();
+      const blob = yield toBlob(cnv);
+      const media = yield mstdn.postMedia(blob);
+      const ret = yield mstdn.postStatus(toot, [media.id]);
+      alert("tooted.");
+    }
+  })().catch((err)=>{ console.error(err, err.stack); alert(err); }); });
+  
+  $clear_btn.on("click", (ev)=>{
+    const ok = confirm("clear?");
+    if(ok){
+      localStorage["tex"] = "";
+      $textarea.val(localStorage["tex"]);
+      typesetMathMD("");
+    }
+  });
+
+
+  localStorage["tex"] = localStorage["tex"] || "I 💗 $\\TeX$\n$$\np(B|A)=\\frac{p(B)p(A|B)}{p(A)}\n$$\n\n\nhttps://legokichi.github.io/mathtodon.html";
+  $textarea.val(localStorage["tex"]);
+  $textarea.focus(0);
+
+  typesetMathMD(localStorage["tex"]);
+
+  return;
+}
+
+function login(){ return _async(function* (){
+  const host = prompt("mastdon server", localStorage["MASTODON_HOST"] || "mathtod.online") || "";
+  if(host === ""){ return null; }
+  localStorage["MASTODON_HOST"] = host;
+  
+  const mail = prompt("mail address", localStorage["USERNAME_MAILADDRESS"] || "foobar@example.com") || "";
+  if(mail === ""){ return null; }
+  localStorage["USERNAME_MAILADDRESS"] = mail;
+  
+  const pass = prompt("password", sessionStorage["PASSWORD"] || "") || "";
+  if(pass === ""){ return null; }
+  sessionStorage["PASSWORD"] = pass;
+  
+  const name = prompt("client_name", localStorage["client_name"] || "Mathtodon_" + Date.now()) || "";
+  if(name === ""){ return null; }
+  if(localStorage["client_name"] != name){
+    localStorage["client_name"] = name;
+    localStorage["client_id"] = "";
+    localStorage["client_secret"] = "";
+  }
+
+  const mstdn = new Mastodon(
+    localStorage["MASTODON_HOST"],
+    localStorage["USERNAME_MAILADDRESS"],
+    sessionStorage["PASSWORD"],
+    localStorage["client_name"],
+    localStorage["client_id"],
+    localStorage["client_secret"]
+  );
+  
+  yield mstdn.connect();
+  
+  localStorage["client_id"] = mstdn.client_id;
+  localStorage["client_secret"] = mstdn.client_secret;
+  sessionStorage["access_token"] = mstdn.access_token;
+
+  return mstdn;
+})(); }
+
+function clear(){
+  localStorage["MASTODON_HOST"] = "";
+  localStorage["USERNAME_MAILADDRESS"] = "";
+  sessionStorage["PASSWORD"] = "";
+  localStorage["client_name"] = "";
+  localStorage["client_id"] = "";
+  localStorage["client_secret"] = "";
+  sessionStorage["access_token"] = "";
+  localStorage["tex"] = "";
+}
+
+class Mastodon{
+  constructor(MASTODON_HOST, USERNAME_MAILADDRESS, PASSWORD, client_name, client_id, client_secret){
+    this.MASTODON_HOST = MASTODON_HOST;
+    this.USERNAME_MAILADDRESS = USERNAME_MAILADDRESS;
+    this.PASSWORD = PASSWORD;
+    this.client_name = client_name;
+    this.scopes = "read write";
+    this.client_id = client_id || null;
+    this.client_secret = client_secret || null;
+    this.access_token = null;
+  }
+  post(url, formData, headers){
+    const params = {method: "POST", body: formData};
+    if(headers instanceof Headers){ params["headers"] = headers; }
+    return fetch(url, params).then((a)=> a.json())
+    .then((a)=> a["error"] != null ? Promise.reject(new Error(JSON.stringify(a))) : a );
+  }
+  call(api, formData, headers){
+    return this.post("https://"+this.MASTODON_HOST+"/api/v1/"+api, formData, headers);
+  }
+  connect(){
+    const prm = this.client_id == null || this.client_secret == null ? this.getClientSecret() : Promise.resolve();
+    return prm.then(()=> this.getOAuthToken() ).then(()=> this);
+  }
+  getClientSecret(){
+    const form = new FormData();
+    form.append("client_name", this.client_name);
+    form.append("redirect_uris", "urn:ietf:wg:oauth:2.0:oob");
+    form.append("scopes", this.scopes);
+    return this.call("apps", form).then((a)=>{
+      this.client_id = a.client_id;
+      this.client_secret = a.client_secret;
+      return a;
+    });
+  }
+  getOAuthToken(){
+    const form = new FormData();
+    form.append("client_id", this.client_id);
+    form.append("client_secret", this.client_secret);
+    form.append("grant_type", "password");
+    form.append("username", this.USERNAME_MAILADDRESS);
+    form.append("password", this.PASSWORD);
+    form.append("scope", this.scopes); // "scope: scopes" is fucking right.
+    return this.post("https://"+this.MASTODON_HOST+"/oauth/token", form).then((a)=>{
+      this.access_token = a.access_token;
+      return a;
+    });
+  }
+  postStatus(status, media_ids){
+    const headers = new Headers();
+    headers.append("Authorization", "Bearer "+this.access_token);
+    headers.append("Accept", 'application/json');
+    headers.append("Content-Type", 'application/json');
+    const form = JSON.stringify({
+      media_ids: media_ids || [],
+      status: status || "",
+    });
+    return this.call("statuses", form, headers);
+  }
+  postMedia(blob){
+    const headers = new Headers();
+    headers.append("Authorization", "Bearer "+this.access_token);
+    const form = new FormData();
+    form.append("file", blob);
+    return this.call("media", form, headers);
+  }
+}
+
+
+function _async(generatorFunc){
+  return function(arg){
+    const generator = generatorFunc(arg);
+    return next(null);
+    function next(arg){
+      const result = generator.next(arg);
+      if(result.done){
+        if(result.value instanceof Promise){
+          return result.value;
+        }
+        return Promise.resolve(result.value);
+      }
+      return result.value.then(next);
+    }
+  }
+}
+
+
+function takeshot(elm){
+  return new Promise((resolve, reject)=>{
+    html2canvas(elm, {
+      allowTaint: true,
+      //logging: true,
+      useCORS: true,
+      width: $(window).width(),
+      height: $(elm).height(),
+      onrendered: resolve });
+  });
+}
+
+function loadScript(url){
+  return new Promise((resolve, reject)=>{
+    const script = document.createElement("script");
+    script.src = url;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+function toBlob(cnv, mimeType, qualityArgument) {
+  if(cnv.toBlob instanceof Function){
+    return new Promise((resolve, reject)=>{
+      cnv.toBlob((blob)=>{
+        if (blob instanceof Blob){ resolve(blob); }
+        else{ reject(new Error("cannot get blob from canvas")); }
+      }, mimeType, qualityArgument);
+    });
+  }
+  const url = cnv.toDataURL(mimeType, qualityArgument);
+  return fetch(url).then((a)=> a.blob());
+}
+
+function sleep(ms){
+  return new Promise((resolve, reject)=>{
+    setTimeout(resolve, ms);
+  });
+}
+
+function typeset(elm){
+  return new Promise((resolve, reject)=>{
+    window.addEventListener("error", onerror); // mathjax error handling
+    MathJax.Hub.Queue(["Typeset", MathJax.Hub, elm]);
+    MathJax.Hub.Queue([resolve]);
+    function onerror(ev){
+      window.removeEventListener("error", onerror);
+      reject(new Error(ev.message));
+    }
+  });
+}
+
+function _escape(PREFIX, SUFFIX, reg, text, f){
+  let tuple = null;
+  let _text = text;
+  while(tuple = reg.exec(text)){
+    _text = _text.replace(tuple[0], PREFIX + f(tuple[1]) + SUFFIX);
+  }
+  return _text;
+}
+function escape(text){
+  const id = (a)=> a;
+  const a = _escape("\n<pre><code class=\"lang-math\">", "</code></pre>\n", /\$\$([\s\S]+?)\$\$/gm, text, id);
+  const b = _escape("<pre><code class=\"lang-math-inline\">", "</code></pre>", /\$([^\r\n]+?)\$/g, a, id);
+  return b;
+}
+function _unescape(text){
+  return text.replace(/\&amp;/g, "&").replace(/\&lt;/g, "<").replace(/\&gt;/g, ">");
+}
+function unescape(text){
+  const a = _escape("<span>$$", "$$</span>", /<pre><code class="lang-math-inline">([\s\S]+?)<\/code><\/pre>/gm, text, _unescape);
+  const b = _escape("<div>$$$$", "$$$$</div>", /<pre><code class="lang-math">([\s\S]+?)<\/code><\/pre>/gm, a, _unescape);
+  return b;
+}
+
+function partialUpdate (src, tar, des) {
+  const debug = false;
+  if(src.length === tar.length){
+    // same length
+    for(let i = 0; i < src.length; i++){
+      if(src[i].outerHTML !== tar[i].outerHTML){
+        console.log(src[i].outerHTML, tar[i].outerHTML)
+        $(des[i]).replaceWith(src[i]); // side effect!
+      }
+    }
+    return;
+  }
+  // diff length
+  // find diff start position
+  let start = 0
+  // tar start
+  for(let i = 0; i < tar.length; i++){
+    if(!(src[i] instanceof Element) || !(tar[i] instanceof Element) || src[i].outerHTML !== tar[i].outerHTML){
+      start = i;
+      break;
+    }
+  }
+  // src start
+  for (let i = 0; i < src.length; i++) {
+    if(!(src[i] instanceof Element) || !(tar[i] instanceof Element) || src[i].outerHTML !== tar[i].outerHTML){
+      start = i;
+      break;
+    }
+  }
+  // find diff end position
+  let srcEnd = 0;
+  let tarEnd = 0;
+  // tar end
+  for (let i = 1; i <= tar.length + 1; i++) {
+    const srcLength = src.length;
+    const tarLength = tar.length;
+    const a = src[srcLength - i];
+    const b = tar[tarLength - i];
+    if(!(a instanceof Element) || !(b instanceof Element) || a.outerHTML !== b.outerHTML){
+      tarEnd = tar.length - i;
+      break;
+    }
+  }
+  // src end
+  for (let i = 1; i <= src.length + 1; i++) {
+    const srcLength = src.length;
+    const tarLength = tar.length;
+    const a = src[srcLength - i];
+    const b = tar[tarLength - i];
+    if(!(a instanceof Element) || !(b instanceof Element) || a.outerHTML !== b.outerHTML){
+      srcEnd = src.length - i;
+      break;
+    }
+  }
+  // check if tar end overlap tar start
+  let overlap = 0;
+  for (let i = start; i >= 0; i--) {
+    const a = tar[i - 1];
+    const b = tar[tarEnd + 1 + start - i];
+    if(a instanceof Element && b instanceof Element && a.outerHTML === b.outerHTML){
+      overlap++;
+    }else{
+      break;
+    }
+  }
+  if (debug) { console.log('overlap:' + overlap); }
+  // show diff content
+  if (debug) {
+    console.log('start:' + start);
+    console.log('tarEnd:' + tarEnd);
+    console.log('srcEnd:' + srcEnd);
+  }
+  tarEnd += overlap;
+  srcEnd += overlap;
+  const repeatAdd = (start - srcEnd) < (start - tarEnd);
+  const repeatDiff = Math.abs(srcEnd - tarEnd) - 1;
+  // push new elements
+  const newElements = [];
+  if (srcEnd >= start) {
+    for (let j = start; j <= srcEnd; j++) {
+      if (!(src[j] instanceof Element)){ continue; }
+      newElements.push(src[j].outerHTML);
+    }
+  } else if (repeatAdd) {
+    for (let j = srcEnd - repeatDiff; j <= srcEnd; j++) {
+      if (!(des[j] instanceof Element)){ continue; }
+      newElements.push(des[j].outerHTML);
+    }
+  }
+  // push remove elements
+  const removeElements = [];
+  if (tarEnd >= start) {
+    for (let j = start; j <= tarEnd; j++) {
+      if (!(des[j] instanceof Element)){ continue; }
+      removeElements.push(des[j]);
+    }
+  } else if (!repeatAdd) {
+    for (let j = start; j <= start + repeatDiff; j++) {
+      if (!(des[j] instanceof Element)){ continue; }
+      removeElements.push(des[j]);
+    }
+  }
+  // add elements
+  if (debug) {
+    console.log('ADD ELEMENTS');
+    console.log(newElements.join('\n'));
+  }
+  const $inserted = $(newElements.join(''));
+  if (des[start] instanceof Element) {
+    // insert middle
+    $inserted.insertBefore(des[start]); // side effect!
+  } else {
+    // insert last
+    $inserted.insertAfter(des[start - 1]); // side effect!
+  }
+  // remove elements
+  if (debug) { console.log('REMOVE ELEMENTS'); }
+  for (let j = 0; j < removeElements.length; j++) {
+    if (debug) {
+      console.log(removeElements[j].outerHTML);
+    }
+    if (removeElements[j] instanceof Element) {
+      $(removeElements[j]).remove();  // side effect!
+    }
+  }
+}
+
+</script>
+</body>
+</html>
